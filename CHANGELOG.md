@@ -1,3 +1,10 @@
+# 1.0.0 (2025-08-26)
+
+
+### Bug Fixes
+
+* Update Dockerfile to streamline environment variable settings and adjust health check script path ([02e83c9](https://github.com/aiblaze/prompthunt.art/commit/02e83c951aaea9ee9fe0518224259ed71cc2c9eb))
+
 # [1.3.0](https://github.com/aiblaze/aifire.art/compare/v1.2.0...v1.3.0) (2025-08-25)
 
 
