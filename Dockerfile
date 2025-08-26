@@ -1,54 +1,58 @@
-# Builder stage 1 - Build the application
+# ===== 阶段一 - 构建应用 =====
+
 FROM node:24-alpine AS builder
 
-# Install pnpm and build dependencies
-RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
-
-# Install build dependencies for native modules
-RUN apk add --no-cache python3 make g++
+# 1.1 安装 pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy the essential files
+# 1.2 复制必要的文件
 COPY .npmrc package.json pnpm-lock.yaml ./
 
-# Install dependencies with rebuild for native modules
-RUN pnpm install --frozen-lockfile --rebuild
+# 1.3 安装依赖
+RUN pnpm install --frozen-lockfile
 
-# Copy the entire project
+# 1.4 复制整个项目
 COPY . ./
 
-# Set environment variables for build
+# 1.5 设置构建时环境变量
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
+# NUXT 应用专属配置（可选）
 ENV NUXT_TELEMETRY_DISABLED=1
 
-# Build the application
+# 1.6 构建应用
 RUN pnpm build
 
-# Build stage 2 - the production image, copy all the files and run next
+# ===== 阶段二 - 构建生产环境镜像 =====
 FROM node:24-alpine
 
 WORKDIR /app
 
-# 安装健康检查所需的工具
+# 2.1 安装健康检查所需的工具
 RUN apk add --no-cache curl wget busybox-extras
 
-# Copy only the built application from the previous stage
+# 2.2 复制构建好的应用
 COPY --from=builder /app/.output ./
 
-# 将健康检查脚本复制到容器内并设置执行权限
+# 2.3 创建脚本目录并复制健康检查脚本
 COPY .xdeploy/production/scripts/docker/healthcheck.sh /app/scripts/healthcheck.sh
 RUN chmod +x /app/scripts/healthcheck.sh
 
-# Default port (can be overridden by APP_PORT_DOCKER)
+# 2.4 设置运行时环境变量
 ARG PORT=3013
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
 ENV PORT=${PORT}
 
-# 设置健康检查
+# 2.5 设置健康检查
 HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=5 \
   CMD ["/app/scripts/healthcheck.sh"]
 
-# Expose the port
+# 2.6 暴露端口
 EXPOSE ${PORT}
 
-# Start the application
+# 2.7 启动应用
 CMD ["node", "server/index.mjs"]
