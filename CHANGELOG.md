@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/aiblaze/prompthunt.art/compare/v1.0.0...v1.1.0) (2025-08-26)
+
+
+### Features
+
+* Update footer to reflect new organization name and description in localization files ([714b9fd](https://github.com/aiblaze/prompthunt.art/commit/714b9fdb17633ed24fbc2c6a6bbc24eb6461727f))
+
 # 1.0.0 (2025-08-26)
 
 
