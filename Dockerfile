@@ -16,10 +16,7 @@ RUN pnpm install --frozen-lockfile
 COPY . ./
 
 # Set environment variables for build
-ENV NODE_ENV=production
 ENV NUXT_TELEMETRY_DISABLED=1
-# 设置内存限制
-ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Build the application
 RUN pnpm build
@@ -35,14 +32,12 @@ RUN apk add --no-cache curl wget busybox-extras
 # Copy only the built application from the previous stage
 COPY --from=builder /app/.output ./
 
-# 创建脚本目录并复制健康检查脚本
-COPY scripts/docker/healthcheck.sh /app/scripts/healthcheck.sh
+# 将健康检查脚本复制到容器内并设置执行权限
+COPY .xdeploy/production/scripts/docker/healthcheck.sh /app/scripts/healthcheck.sh
 RUN chmod +x /app/scripts/healthcheck.sh
 
 # Default port (can be overridden by APP_PORT_DOCKER)
 ARG PORT=3013
-ENV NODE_ENV=production
-ENV HOST=0.0.0.0
 ENV PORT=${PORT}
 
 # 设置健康检查
