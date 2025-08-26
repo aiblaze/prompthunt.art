@@ -1,0 +1,29 @@
+name: prompthunt
+services:
+  prompthunt:
+    image: crpi-3l4wwf7k520eyk0d.cn-shanghai.personal.cr.aliyuncs.com/aifire/prompthunt:latest
+    container_name: prompthunt
+    restart: always
+    ports:
+      - '3013:3013'
+    environment:
+      - NODE_ENV=production
+    networks:
+      - network_prompthunt
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    # 健康检查
+    healthcheck:
+      # 使用容器内置的健康检查脚本
+      test: [CMD, /app/scripts/healthcheck.sh]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 20s
+
+networks:
+  network_prompthunt:
+    driver: bridge

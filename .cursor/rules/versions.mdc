@@ -1,0 +1,53 @@
+---
+description: 第三方依赖版本要求
+globs: 
+alwaysApply: true
+---
+# 第三方依赖版本要求
+
+## 依赖版本策略
+
+在本项目中，应遵循以下依赖版本策略：
+
+1. **始终优先使用最新稳定版本**的第三方依赖和 GitHub Actions
+2. **避免使用过时版本**的依赖，这可能导致安全漏洞或缺少新功能
+3. **定期检查和更新**所有依赖的版本
+
+## GitHub Actions 依赖
+
+对于 GitHub Actions 工作流中的依赖，请使用以下版本或更新版本：
+
+| Action | 最低版本要求 | 说明 |
+|--------|------------|------|
+| actions/checkout | v4 | 用于检出代码 |
+| docker/setup-buildx-action | v3 | 设置 Docker Buildx |
+| docker/login-action | v3 | 登录到 Docker 仓库 |
+| docker/build-push-action | v6 | 构建和推送 Docker 镜像 |
+| actions/setup-node | v4 | 设置 Node.js 环境 |
+| shimataro/ssh-key-action | v2 | 设置 SSH Key |
+
+## NPM 依赖
+
+- package.json 中的依赖应定期更新到最新的兼容版本
+- 使用 `npm outdated` 或 `yarn outdated` 检查过时的依赖
+- 考虑使用 Dependabot 自动更新依赖
+
+## 其他工具
+
+- Docker 相关工具使用最新稳定版本
+- Node.js 使用当前 LTS 版本
+
+## 版本更新流程
+
+1. 定期检查依赖更新（至少每季度一次）
+2. 在测试环境验证新版本依赖的兼容性
+3. 更新生产环境的依赖版本
+
+## 版本验证
+
+在更新版本前，请确保新版本已经正式发布且稳定。可以通过以下方式验证：
+1. 访问 GitHub Marketplace 或依赖的官方仓库
+2. 检查发布说明和兼容性警告
+3. 查看社区反馈与问题报告
+
+此规则旨在确保项目使用最新、最安全的依赖版本，同时保持代码的稳定性和可维护性。 

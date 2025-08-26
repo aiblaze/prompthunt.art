@@ -1,0 +1,60 @@
+
+.demo button {
+  --c-brand: rgb(var(--color-primary-DEFAULT));
+  --c-brand2: rgb(var(--color-primary-700));
+  --c-brand-dark: rgb(var(--color-primary-600));
+  --c-brand-active: rgb(var(--color-primary-400));
+  --c-disabled-bg: rgb(var(--color-gray-500));
+  --c-disabled-fg: rgb(var(--color-gray-100));
+  padding: 3px 15px;
+  background-color: var(--c-brand);
+  border: none;
+  outline: none;
+  color: #fff;
+  margin: .5rem 0;
+  border-bottom: 2px solid var(--c-brand2);
+  text-shadow: 1px 1px 1px var(--c-brand2);
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.demo button.small {
+  padding: .25em .7em .2em
+}
+
+.demo button.orange {
+  --c-brand: #db8742;
+  --c-brand-dark: #ad6e39;
+  --c-brand-active: #d67e36
+}
+
+.demo button.red {
+  --c-brand: #f56c6c;
+  --c-brand-dark: #e41c1c;
+  --c-brand-active: #e94c4c
+}
+
+.demo button:hover {
+  background-color: var(--c-brand-dark);
+}
+
+.demo button:active {
+  border-bottom: 0;
+  border-top: 2px solid var(--c-brand-active);
+}
+
+.demo button~button {
+  margin-left: .5rem
+}
+
+.demo button[disabled],.demo button.disabled {
+  cursor: default;
+  background-color: var(--c-disabled-bg);
+  border-bottom: 2px solid var(--c-disabled-fg);
+  pointer-events: none;
+  text-shadow: none;
+  border-top: 0;
+  opacity: .8
+}

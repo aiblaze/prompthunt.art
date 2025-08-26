@@ -1,0 +1,37 @@
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Yarn
+.yarn
+.yarnrc.yml
+
+# temp
+temp
+.temp
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# X.Deploy
+.xdeploy/templates
+.xdeploy/*.yml
+.xdeploy/.backup

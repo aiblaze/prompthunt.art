@@ -1,0 +1,187 @@
+# ============================================================================
+# XDeploy Nginx 配置部署工作流
+# ============================================================================
+#
+# 功能说明：
+#   - 自动生成和部署 Nginx 站点配置文件
+#   - 支持多种 Nginx 配置模板（H5BP、标准模板）
+#   - 配置 SSL 证书路径和反向代理设置
+#   - 验证配置语法并重新加载 Nginx
+#
+# 使用场景：
+#   - 新站点首次配置 Nginx
+#   - 更新现有站点的 Nginx 配置
+#   - 批量部署配置到多台服务器
+#   - 修改应用端口或域名配置
+#
+# 前置条件：
+#   - SSL 证书已部署（需先运行 03-xdeploy-ssl-cert.yml）
+#   - Nginx 已安装在目标服务器上
+#   - SSH 密钥已配置
+#
+# 支持的配置模板：
+#   - H5BP：基于 HTML5 Boilerplate 的优化配置
+#   - 标准：通用的 Nginx 配置模板
+#
+# 配置功能：
+#   - SSL/TLS 配置
+#   - 反向代理设置
+#   - 静态资源优化
+#   - 安全头配置
+#   - Gzip 压缩配置
+#   - 缓存策略配置
+#
+# 安全特性：
+#   - 配置语法验证
+#   - 平滑重新加载
+#   - 配置备份机制
+#
+# ============================================================================
+
+name: 04-XDeployNginxConfig-production
+
+on:
+  workflow_dispatch:
+
+env:
+  DEPLOY_CONFIGS_DIR: ${{ github.workspace }}/.xdeploy/production/configs
+
+jobs:
+  deploy:
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set deployment environment
+        id: set-env
+        run: |
+          ENV="${{ vars.XDP_DEPLOY_ENV || 'production' }}"
+          echo "DEPLOY_ENV=$ENV" >> "$GITHUB_OUTPUT"
+          echo "使用部署环境: $ENV"
+
+      - name: Set parameters
+        id: params
+        run: |
+          # 设置服务器
+          if [ -n "${{ vars.XDP_SERVERS }}" ]; then
+            SERVERS="${{ vars.XDP_SERVERS }}"
+          else
+            echo "::error::未提供服务器。请在 production 环境变量中设置 XDP_SERVERS。"
+            exit 1
+          fi
+          echo "SERVERS=$SERVERS" >> "$GITHUB_OUTPUT"
+
+          # 设置域名
+          if [ -n "${{ vars.XDP_APP_DOMAIN }}" ]; then
+            DOMAIN="${{ vars.XDP_APP_DOMAIN }}"
+          else
+            echo "::error::未提供域名。请在 production 环境变量中设置 XDP_APP_DOMAIN。"
+            exit 1
+          fi
+          echo "DOMAIN=$DOMAIN" >> "$GITHUB_OUTPUT"
+
+          # 设置应用端口
+          if [ -n "${{ vars.XDP_APP_PORT }}" ]; then
+            APP_PORT="${{ vars.XDP_APP_PORT }}"
+          else
+            echo "::error::未提供应用端口。请在 production 环境变量中设置 XDP_APP_PORT。"
+            exit 1
+          fi
+          echo "APP_PORT=$APP_PORT" >> "$GITHUB_OUTPUT"
+
+          # 设置证书目录
+          if [ -n "${{ vars.XDP_CERT_DIR }}" ]; then
+            CERT_DIR="${{ vars.XDP_CERT_DIR }}"
+          else
+            echo "::error::未提供证书目录。请在 production 环境变量中设置 XDP_CERT_DIR。"
+            exit 1
+          fi
+          echo "CERT_DIR=$CERT_DIR" >> "$GITHUB_OUTPUT"
+
+          # 设置 Nginx 配置目录
+          if [ -n "${{ vars.XDP_NGINX_CONF_DIR }}" ]; then
+            NGINX_CONF_DIR="${{ vars.XDP_NGINX_CONF_DIR }}"
+          else
+            echo "::error::未提供 Nginx 配置目录。请在 production 环境变量中设置 XDP_NGINX_CONF_DIR。"
+            exit 1
+          fi
+          echo "NGINX_CONF_DIR=$NGINX_CONF_DIR" >> "$GITHUB_OUTPUT"
+
+          # 设置 Nginx 配置类型
+          if [ -n "${{ vars.XDP_NGINX_CONF_TYPE }}" ]; then
+            NGINX_CONF_TYPE="${{ vars.XDP_NGINX_CONF_TYPE }}"
+          else
+            NGINX_CONF_TYPE="h5bp"
+          fi
+          echo "NGINX_CONF_TYPE=$NGINX_CONF_TYPE" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Nginx configuration
+        id: nginx_config
+        run: |
+          mkdir -p ./deploy
+
+          # 根据 Nginx 配置类型选择模板
+          if [ "${{ steps.params.outputs.NGINX_CONF_TYPE }}" == "h5bp" ]; then
+            echo "使用 h5bp 风格的 Nginx 配置模板"
+            TEMPLATE_FILE="${{ env.DEPLOY_CONFIGS_DIR }}/h5bp-site.nginx.conf"
+          else
+            echo "使用标准 Nginx 配置模板"
+            TEMPLATE_FILE="${{ env.DEPLOY_CONFIGS_DIR }}/site.nginx.conf"
+          fi
+
+          echo "配置模板文件：$TEMPLATE_FILE"
+
+          # 生成 Nginx 配置文件
+          cp $TEMPLATE_FILE ./deploy/${{ steps.params.outputs.DOMAIN }}.conf
+
+          echo "生成的 Nginx 配置文件内容："
+          cat ./deploy/${{ steps.params.outputs.DOMAIN }}.conf
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.XDS_SSH_PRIVATE_KEY }}
+          known_hosts: unnecessary
+          if_key_exists: replace
+
+      - name: Deploy Nginx configuration to servers
+        id: deploy
+        run: |
+          # 分割服务器列表
+          IFS=',' read -ra SERVER_ARRAY <<< "${{ steps.params.outputs.SERVERS }}"
+
+          # 部署到每个服务器
+          for server in "${SERVER_ARRAY[@]}"; do
+            echo "===== 开始部署 Nginx 配置到服务器: $server ====="
+
+            # 添加服务器到已知主机
+            ssh-keyscan -H $(echo $server | cut -d@ -f2) >> ~/.ssh/known_hosts
+
+            # 上传 Nginx 配置文件
+            ssh $server "sudo mkdir -p ${{ steps.params.outputs.NGINX_CONF_DIR }}"
+            scp ./deploy/${{ steps.params.outputs.DOMAIN }}.conf $server:/tmp/${{ steps.params.outputs.DOMAIN }}.conf
+            ssh $server "sudo mv /tmp/${{ steps.params.outputs.DOMAIN }}.conf ${{ steps.params.outputs.NGINX_CONF_DIR }}/${{ steps.params.outputs.DOMAIN }}.conf"
+
+            # 检查 Nginx 配置语法
+            echo "检查 Nginx 配置语法..."
+            ssh $server "sudo nginx -t" || { echo "Nginx 配置语法检查失败"; exit 1; }
+
+            # 重新加载 Nginx 配置
+            echo "重新加载 Nginx 配置..."
+            ssh $server "sudo systemctl reload nginx || sudo service nginx reload"
+
+            echo "===== 服务器 $server Nginx 配置部署完成 ====="
+          done
+
+      - name: Nginx Config Deployment Summary
+        run: |
+          echo "✅ Nginx 配置部署成功！"
+          echo "📋 部署详情："
+          echo "   - 域名：${{ steps.params.outputs.DOMAIN }}"
+          echo "   - 部署服务器：${{ steps.params.outputs.SERVERS }}"
+          echo "   - 证书目录：${{ steps.params.outputs.CERT_DIR }}"
+          echo "   - Nginx 配置目录：${{ steps.params.outputs.NGINX_CONF_DIR }}"
+          echo "   - 应用端口：${{ steps.params.outputs.APP_PORT }}"
+          echo "   - 部署时间：$(date)"

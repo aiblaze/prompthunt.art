@@ -1,0 +1,18 @@
+---
+description: Project requirements
+globs: 
+alwaysApply: true
+---
+- 项目功能需求请参考文档：[about.md](mdc:docs/about.md)
+- 增加或修改功能后，请根据情况同步更新 [about.md](mdc:docs/about.md)
+- 项目基于 Nuxt 最新版本开发，在回答 Nuxt 相关问题时，尽量联网查找官网网站的资料：https://nuxt.com/docs/api、https://content.nuxt.com/
+- 关于 linux.init 项目的具体用法请参考 https://raw.githubusercontent.com/aiblaze/linux.init/refs/heads/main/README.md
+- [deploy.md](mdc:docs/deploy.md) 用于记录项目自动化部署的步骤，需要面向部署人员，内容简单明了
+- [readme.md](mdc:docs/workflows/readme.md) 用于概括介绍工作流
+- `docs/workflows` 目录用于存放工作流的详细说明文档，需要为每个工作流准备一个说明文件，文件命名规范为："工作流的文件名.md”
+
+## x.certbot
+
+在涉及 `certbot` 的功能实现时，使用 `x.certbot` 开源项目，它的 github 地址为 https://github.com/aispin/x.certbot，使用说明文档如下：
+
+- X Certbot 使用说明文档：https://raw.githubusercontent.com/aispin/x.certbot/refs/heads/main/docs/04-usage-guide.md

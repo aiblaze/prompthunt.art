@@ -1,0 +1,138 @@
+# ============================================================================
+# XDeploy 服务器初始化工作流
+# ============================================================================
+#
+# 功能说明：
+#   - 自动初始化部署服务器的基础环境
+#   - 安装必要的软件包（Node.js、Docker、PM2 等）
+#   - 配置 Docker 镜像仓库加速器
+#   - 验证服务器操作系统兼容性
+#
+# 使用场景：
+#   - 新服务器首次部署前的环境准备
+#   - 批量初始化多台服务器
+#   - 更新服务器基础软件版本
+#
+# 前置条件：
+#   - SSH 密钥已配置（需先运行 01-xdeploy-ssh-key.yml）
+#   - 服务器为支持的操作系统（AlmaLinux、Rocky Linux、CentOS、Ubuntu、Debian）
+#   - 服务器具有 sudo 权限
+#
+# 支持的操作系统：
+#   - AlmaLinux / Rocky Linux / CentOS
+#   - Ubuntu / Debian
+#
+# 安装的组件：
+#   - Node.js（可配置版本）
+#   - Docker（含镜像加速配置）
+#   - PM2（可配置版本）
+#   - 其他必要的系统工具
+#
+# ============================================================================
+
+name: 02-XDeployInitServer-production
+
+on:
+  workflow_dispatch:
+
+jobs:
+  initialize:
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set deployment environment
+        id: set-env
+        run: |
+          ENV="${{ vars.XDP_DEPLOY_ENV || 'production' }}"
+          echo "DEPLOY_ENV=$ENV" >> "$GITHUB_OUTPUT"
+          echo "使用部署环境: $ENV"
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.XDS_SSH_PRIVATE_KEY }}
+          known_hosts: unnecessary
+          if_key_exists: replace
+
+      - name: Set default servers if not provided
+        id: set-servers
+        run: |
+          if [ -z "${{ vars.XDP_SERVERS }}" ]; then
+            echo "::error::未提供服务器列表，且仓库变量中未配置 XDP_SERVERS"
+            exit 1
+          fi
+          echo "SERVERS=${{ vars.XDP_SERVERS }}" >> $GITHUB_ENV
+
+      - name: Set default Parameters
+        id: set-default-params
+        run: |
+          if [ -z "${{ vars.XDP_NODE_VERSION }}" ]; then
+            echo "XDP_NODE_VERSION=latest" >> $GITHUB_ENV
+          else
+            echo "XDP_NODE_VERSION=${{ vars.XDP_NODE_VERSION }}" >> $GITHUB_ENV
+          fi
+          if [ -z "${{ vars.XDP_PM2_VERSION }}" ]; then
+            echo "XDP_PM2_VERSION=latest" >> $GITHUB_ENV
+          else
+            echo "XDP_PM2_VERSION=${{ vars.XDP_PM2_VERSION }}" >> $GITHUB_ENV
+          fi
+          if [ -z "${{ vars.XDP_DOCKER_REGISTRY_ACCELERATOR }}" ]; then
+            echo "XDP_DOCKER_REGISTRY_ACCELERATOR=https://mirrors.tuna.tsinghua.edu.cn" >> $GITHUB_ENV
+          else
+            echo "XDP_DOCKER_REGISTRY_ACCELERATOR=${{ vars.XDP_DOCKER_REGISTRY_ACCELERATOR }}" >> $GITHUB_ENV
+          fi
+
+      - name: Initialize servers
+        shell: bash
+        run: |
+          # 分割服务器列表
+          IFS=',' read -ra SERVER_LIST <<< "$SERVERS"
+
+          # 初始化每台服务器
+          for server in "${SERVER_LIST[@]}"; do
+            echo "正在初始化服务器: $server"
+
+            # 检查服务器操作系统
+            OS_CHECK=$(ssh -o StrictHostKeyChecking=no $server "cat /etc/os-release | grep -E 'ID=(\"linux\"|\"rocky\"|\"centos\"|\"ubuntu\"|\"debian\"|\"almalinux\")'")
+
+            if [ -z "$OS_CHECK" ]; then
+              echo "错误: 服务器 $server 不是支持的操作系统 (AlmaLinux, Rocky Linux, CentOS, Ubuntu 或 Debian)"
+              continue
+            fi
+
+            # 创建临时目录
+            TEMP_DIR=$(ssh -o StrictHostKeyChecking=no $server "mktemp -d")
+            echo "创建临时目录: $TEMP_DIR"
+
+            # 克隆初始化仓库
+            ssh -o StrictHostKeyChecking=no $server "cd $TEMP_DIR && git clone https://github.com/aiblaze/linux.init.git"
+
+            # 运行安装脚本（使用非交互模式和环境变量）
+            echo "开始安装组件..."
+            ssh -o StrictHostKeyChecking=no $server "cd $TEMP_DIR/linux.init && \
+              NON_INTERACTIVE=true \
+              NODEJS_VERSION='$XDP_NODE_VERSION' \
+              DOCKER_REGISTRY_MIRROR='$XDP_DOCKER_REGISTRY_ACCELERATOR' \
+              PM2_VERSION='$XDP_PM2_VERSION' \
+              sudo -E bash install.sh"
+
+            # 清理临时目录
+            ssh -o StrictHostKeyChecking=no $server "rm -rf $TEMP_DIR"
+
+            echo "服务器 $server 初始化完成"
+          done
+
+          echo "所有服务器初始化完成"
+
+      - name: Initialization summary
+        run: |
+          echo "## 服务器初始化摘要" >> $GITHUB_STEP_SUMMARY
+          echo "部署环境: ${{ steps.set-env.outputs.DEPLOY_ENV }}" >> $GITHUB_STEP_SUMMARY
+          echo "初始化的服务器: $SERVERS" >> $GITHUB_STEP_SUMMARY
+          echo "Node.js 版本: $XDP_NODE_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "PM2 版本: $XDP_PM2_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "Docker 镜像仓库镜像: $XDP_DOCKER_REGISTRY_ACCELERATOR" >> $GITHUB_STEP_SUMMARY
+          echo "初始化过程已完成。请检查日志以确认所有服务器都已成功初始化。" >> $GITHUB_STEP_SUMMARY

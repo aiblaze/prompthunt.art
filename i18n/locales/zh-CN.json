@@ -1,0 +1,31 @@
+{
+  "author": {
+    "name": "PROMPTHUNT 🔥",
+    "title": "掌握硅人语言，人机共启新章。",
+    "desc": "聚焦全球 AI 提示词（prompt），帮助大家高效用好 AI。关注硅人语言艺术，AI 世界触手可得！"
+  },
+  "labels": {
+    "stayInTouch": "联系我们",
+    "wechat": "微信",
+    "email": "邮箱",
+    "allArticles": "全部文章",
+    "latestArticles": "最新文章",
+    "home": "首页",
+    "articles": "文章",
+    "bookmarks": "书签",
+    "music": "音乐",
+    "allRightsReserved": "保留所有权利"
+  },
+  "pageArticles": {
+    "title": "AI 提示词精选",
+    "desc": "聚焦全球 AI 提示词（prompt），帮助大家高效用好 AI。"
+  },
+  "pageMusic": {
+    "title": "AI 音乐",
+    "desc": "最佳 AI 音乐，由网易云首席音乐合伙人亲耳挑选。"
+  },
+  "pageBookmarks": {
+    "title": "AI 书签",
+    "desc": "AI 必备站点推荐"
+  }
+}

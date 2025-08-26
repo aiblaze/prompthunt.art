@@ -1,0 +1,25 @@
+@import "tailwindcss" theme(static);
+@import "@nuxt/ui";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-blue-50: oklch(0.965 0.018 253.054);   /* #EBF1FF */
+  --color-blue-100: oklch(0.933 0.034 254.976);  /* #D6E3FF */
+  --color-blue-200: oklch(0.865 0.068 257.054);  /* #ADC7FF */
+  --color-blue-300: oklch(0.797 0.102 258.976);  /* #84ABFF */
+  --color-blue-400: oklch(0.729 0.136 260.897);  /* #5B8FFF */
+  --color-blue-500: oklch(0.661 0.170 262.819);  /* #3273FF */
+  --color-blue-600: oklch(0.593 0.204 264.740);  /* #0048E6 - AI Fire 星火蓝 */
+  --color-blue-700: oklch(0.525 0.187 266.662);  /* #0039B8 */
+  --color-blue-800: oklch(0.457 0.170 268.583);  /* #002FA7 - 克莱因蓝 */
+  --color-blue-900: oklch(0.389 0.136 270.505);  /* #001F6E */
+  --color-blue-950: oklch(0.321 0.085 272.426);  /* #001035 */
+}
+
+:root {
+  --ui-primary: var(--color-blue-600);
+}
+
+#__nuxt {
+  @apply flex flex-col h-full;
+}

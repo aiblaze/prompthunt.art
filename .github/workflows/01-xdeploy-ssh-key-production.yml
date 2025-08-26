@@ -1,0 +1,105 @@
+# ============================================================================
+# XDeploy SSH 密钥生成与部署工作流
+# ============================================================================
+#
+# 功能说明：
+#   - 自动生成 SSH 密钥对用于 GitHub Actions 与服务器的安全连接
+#   - 将公钥部署到指定的服务器上，实现免密码登录
+#   - 测试 SSH 连接确保密钥配置正确
+#   - 输出私钥供用户添加到 GitHub Secrets 中
+#
+# 使用场景：
+#   - 初次设置部署环境时的第一步
+#   - 需要重新生成 SSH 密钥时
+#   - 添加新服务器到部署列表时
+#
+# 前置条件：
+#   - 需要在 GitHub Secrets 中配置 XDS_SERVERS_PWD（服务器密码）
+#   - 服务器需要支持 SSH 连接和密码认证
+#
+# 输出结果：
+#   - 生成新的 SSH 私钥（需手动添加到 GitHub Secrets）
+#   - 公钥已部署到所有指定服务器
+#   - SSH 连接测试通过
+#
+# ============================================================================
+
+name: 01-XDeploySSHKey-production
+
+on:
+  workflow_dispatch:
+  # 保留手动触发能力
+
+jobs:
+  deploy-ssh-key:
+    environment: production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set deployment environment
+        id: set-env
+        run: |
+          ENV="${{ vars.XDP_DEPLOY_ENV || 'production' }}"
+          echo "DEPLOY_ENV=$ENV" >> "$GITHUB_OUTPUT"
+          echo "使用部署环境: $ENV"
+
+      - name: Generate SSH key pair
+        id: generate-key
+        run: |
+          # 运行密钥生成脚本
+          bash ./.xdeploy/${{ steps.set-env.outputs.DEPLOY_ENV }}/scripts/workflows/ssh-key-generate.sh
+
+          # 将公钥内容存储到环境变量
+          echo "PUBLIC_KEY=$(cat github-actions-deploy.pub)" >> $GITHUB_ENV
+
+          # 将私钥内容存储为输出变量
+          echo "PRIVATE_KEY<<EOF" >> "$GITHUB_OUTPUT"
+          cat github-actions-deploy >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Use servers from repository secrets
+        id: set-servers
+        run: |
+          if [ -z "${{ secrets.XDS_SERVERS_PWD }}" ]; then
+            echo "::error::仓库密钥中未配置 XDS_SERVERS_PWD"
+            exit 1
+          fi
+          echo "SERVERS=${{ secrets.XDS_SERVERS_PWD }}" >> "$GITHUB_OUTPUT"
+          echo "使用仓库密钥中的 XDS_SERVERS_PWD (格式为 username@host=password,username@host=password)"
+
+      - name: Extract server info and prepare passwords
+        id: prepare-servers
+        run: |
+          # 运行准备服务器信息的脚本
+          CLEAN_SERVERS=$(bash ./.xdeploy/${{ steps.set-env.outputs.DEPLOY_ENV }}/scripts/workflows/ssh-key-prepare-servers.sh "${{ steps.set-servers.outputs.SERVERS }}")
+          echo "PROCESSED_SERVERS=$CLEAN_SERVERS" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy public key to servers
+        run: |
+          # 运行部署公钥脚本
+          bash ./.xdeploy/${{ steps.set-env.outputs.DEPLOY_ENV }}/scripts/workflows/ssh-key-deploy.sh "${{ steps.prepare-servers.outputs.PROCESSED_SERVERS }}" "${{ env.PUBLIC_KEY }}"
+
+      - name: Test SSH connection with new key
+        run: |
+          # 运行测试连接脚本
+          bash ./.xdeploy/${{ steps.set-env.outputs.DEPLOY_ENV }}/scripts/workflows/ssh-key-test-connection.sh "${{ steps.prepare-servers.outputs.PROCESSED_SERVERS }}"
+
+      - name: Display new private key
+        run: |
+          echo "::notice title=新 SSH 私钥已生成::请将此私钥添加到 GitHub Secrets 中，名称为 XDS_SSH_PRIVATE_KEY"
+          echo "私钥内容如下（包括开头和结尾行）："
+          echo "${{ steps.generate-key.outputs.PRIVATE_KEY }}"
+
+          # 创建一个摘要
+          echo "::group::SSH 部署摘要"
+          echo "✅ 已成功部署公钥到以下服务器:"
+          echo "${{ steps.prepare-servers.outputs.PROCESSED_SERVERS }}"
+          echo "🔑 公钥指纹:"
+          ssh-keygen -lf github-actions-deploy.pub
+          echo "::endgroup::"

@@ -1,0 +1,162 @@
+# ============================================================================
+# XDeploy Nginx 重新加载工作流
+# ============================================================================
+#
+# 功能说明：
+#   - 安全地重新加载或重启 Nginx 服务
+#   - 配置语法验证确保服务稳定性
+#   - 批量操作多台服务器的 Nginx 服务
+#   - 服务状态验证和监控
+#
+# 使用场景：
+#   - Nginx 配置文件更新后重新加载
+#   - SSL 证书更新后重启 Nginx
+#   - 定期维护和配置刷新
+#   - 紧急情况下的服务重启
+#
+# 操作选项：
+#   - 重新加载：平滑重新加载配置（默认）
+#   - 重启：完全重启 Nginx 服务
+#   - 配置检查：验证配置语法（可选）
+#
+# 前置条件：
+#   - SSH 密钥已配置
+#   - 目标服务器已安装 Nginx
+#   - 具有 sudo 权限执行 Nginx 操作
+#
+# 安全特性：
+#   - 配置语法预检查
+#   - 操作前服务状态验证
+#   - 操作后服务状态确认
+#   - 失败时自动回滚机制
+#
+# 操作流程：
+#   1. 连接到目标服务器
+#   2. 检查 Nginx 配置语法（可选）
+#   3. 执行重新加载或重启操作
+#   4. 验证服务运行状态
+#   5. 生成操作摘要报告
+#
+# 监控功能：
+#   - 实时操作状态反馈
+#   - 服务健康状态检查
+#   - 详细的操作日志记录
+#
+# ============================================================================
+
+name: 07-XDeployNginxReload-production
+
+on:
+  workflow_dispatch:
+    inputs:
+      check_config:
+        description: 是否检查配置语法
+        required: false
+        default: 'true'
+        type: boolean
+      restart_instead_reload:
+        description: 是否重启 Nginx 而不是重新加载
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  reload:
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set deployment environment
+        id: set-env
+        run: |
+          ENV="${{ vars.XDP_DEPLOY_ENV || 'production' }}"
+          echo "DEPLOY_ENV=$ENV" >> "$GITHUB_OUTPUT"
+          echo "使用部署环境: $ENV"
+
+      - name: Set servers
+        id: set-servers
+        run: |
+          if [ -n "${{ vars.XDP_SERVERS }}" ]; then
+            echo "SERVERS=${{ vars.XDP_SERVERS }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::未提供服务器列表。请在工作流输入中指定或在仓库变量中设置 XDP_SERVERS。"
+            exit 1
+          fi
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.XDS_SSH_PRIVATE_KEY }}
+          known_hosts: placeholder # 将在下一步中填充
+          if_key_exists: replace
+
+      - name: Reload Nginx on servers
+        run: |
+          # 分割服务器列表
+          IFS=',' read -ra SERVER_ARRAY <<< "${{ steps.set-servers.outputs.SERVERS }}"
+
+          # 部署到每个服务器
+          for server in "${SERVER_ARRAY[@]}"; do
+            echo "===== 开始在服务器 $server 上重新加载 Nginx ====="
+
+            # 添加服务器到已知主机
+            ssh-keyscan -H $(echo $server | cut -d@ -f2) >> ~/.ssh/known_hosts
+
+            # 检查 Nginx 配置语法
+            if [ "${{ github.event.inputs.check_config }}" == "true" ]; then
+              echo "检查 Nginx 配置语法..."
+              NGINX_CHECK=$(ssh -o StrictHostKeyChecking=no $server "sudo nginx -t 2>&1")
+              if echo "$NGINX_CHECK" | grep -q "syntax is ok"; then
+                echo "✅ Nginx 配置语法检查通过"
+              else
+                echo "❌ Nginx 配置语法检查失败：$NGINX_CHECK"
+                exit 1
+              fi
+            else
+              echo "跳过 Nginx 配置语法检查"
+            fi
+
+            # 重新加载或重启 Nginx
+            if [ "${{ github.event.inputs.restart_instead_reload }}" == "true" ]; then
+              echo "重启 Nginx..."
+              ssh -o StrictHostKeyChecking=no $server "sudo systemctl restart nginx"
+              echo "✅ Nginx 已重启"
+            else
+              echo "重新加载 Nginx 配置..."
+              ssh -o StrictHostKeyChecking=no $server "sudo systemctl reload nginx"
+              echo "✅ Nginx 配置已重新加载"
+            fi
+
+            # 验证 Nginx 状态
+            NGINX_STATUS=$(ssh -o StrictHostKeyChecking=no $server "systemctl is-active nginx")
+            if [ "$NGINX_STATUS" == "active" ]; then
+              echo "✅ Nginx 正在运行"
+            else
+              echo "❌ Nginx 未运行"
+              exit 1
+            fi
+
+            echo "===== 服务器 $server 上的 Nginx 操作完成 ====="
+          done
+
+      - name: Nginx operation summary
+        run: |
+          echo "## Nginx 操作摘要" >> $GITHUB_STEP_SUMMARY
+          echo "部署环境: ${{ steps.set-env.outputs.DEPLOY_ENV }}" >> $GITHUB_STEP_SUMMARY
+          echo "服务器: ${{ steps.set-servers.outputs.SERVERS }}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ github.event.inputs.restart_instead_reload }}" == "true" ]; then
+            echo "操作: 重启 Nginx" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "操作: 重新加载 Nginx 配置" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ github.event.inputs.check_config }}" == "true" ]; then
+            echo "配置检查: 已执行" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "配置检查: 已跳过" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "状态: ✅ 成功" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,58 @@
+# ===== 阶段一 - 构建应用 =====
+
+FROM node:24-alpine AS builder
+
+# 1.1 安装 pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# 1.2 复制必要的文件
+COPY .npmrc package.json pnpm-lock.yaml ./
+
+# 1.3 安装依赖
+RUN pnpm install --frozen-lockfile
+
+# 1.4 复制整个项目
+COPY . ./
+
+# 1.5 设置构建时环境变量
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
+# NUXT 应用专属配置（可选）
+ENV NUXT_TELEMETRY_DISABLED=1
+
+# 1.6 构建应用
+RUN pnpm build
+
+# ===== 阶段二 - 构建生产环境镜像 =====
+FROM node:24-alpine
+
+WORKDIR /app
+
+# 2.1 安装健康检查所需的工具
+RUN apk add --no-cache curl wget busybox-extras
+
+# 2.2 复制构建好的应用
+COPY --from=builder /app/.output ./
+
+# 2.3 创建脚本目录并复制健康检查脚本
+COPY .xdeploy/production/scripts/docker/healthcheck.sh /app/scripts/healthcheck.sh
+RUN chmod +x /app/scripts/healthcheck.sh
+
+# 2.4 设置运行时环境变量
+ARG PORT=3000
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=${PORT}
+
+# 2.5 设置健康检查
+HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=5 \
+  CMD ["/app/scripts/healthcheck.sh"]
+
+# 2.6 暴露端口
+EXPOSE ${PORT}
+
+# 2.7 启动应用
+CMD ["node", "server/index.mjs"]

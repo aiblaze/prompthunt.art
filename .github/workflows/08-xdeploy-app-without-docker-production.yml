@@ -1,0 +1,315 @@
+# ============================================================================
+# XDeploy 应用直接部署工作流（非容器化）
+# ============================================================================
+#
+# 功能说明：
+#   - 直接在服务器上构建和部署应用（不使用 Docker）
+#   - 支持使用 semantic-release 进行版本管理
+#   - 支持多种 Node.js 包管理器（npm、yarn、pnpm、bun）
+#   - 使用 PM2 进行进程管理
+#   - 灵活的构建和部署配置选项
+#
+# 使用场景：
+#   - 不适合容器化的应用部署
+#   - 需要直接访问服务器资源的应用
+#   - 轻量级应用的快速部署
+#   - 开发和测试环境的应用部署
+#
+# 支持的包管理器：
+#   - npm：Node.js 默认包管理器
+#   - yarn：Facebook 开发的包管理器
+#   - pnpm：高效的磁盘空间利用
+#   - bun：高性能的 JavaScript 运行时
+#
+# 部署选项：
+#   - Node.js 版本选择
+#   - 自定义构建命令
+#   - 部署前目录清理
+#   - 部署后依赖安装
+#   - PM2 进程管理配置
+#
+# 前置条件：
+#   - 服务器已安装 Node.js 和 PM2
+#   - SSH 密钥已配置
+#   - 应用包含有效的 package.json
+#
+# 部署流程：
+#   1. 检出代码并设置 Node.js 环境
+#   2. 安装项目依赖
+#   3. 构建应用（可自定义构建命令）
+#   4. 部署构建产物到服务器
+#   5. 配置 PM2 进程管理
+#   6. 启动或重启应用服务
+#
+# 进程管理：
+#   - PM2 生态系统配置
+#   - 进程监控和自动重启
+#   - 日志管理
+#   - 负载均衡配置
+#
+# ============================================================================
+
+name: 08-XDeployAppWithoutDocker-production
+
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:
+    inputs:
+      node_version:
+        description: Node.js 版本
+        required: false
+        type: string
+        default: latest
+      bun_version:
+        description: Bun 版本
+        required: false
+        type: string
+        default: latest
+      build_command:
+        description: 构建命令
+        required: false
+        type: string
+        default: pnpm run build
+      package_manager:
+        description: '包管理器 (npm, yarn, pnpm, bun)'
+        required: false
+        type: string
+        default: pnpm
+      clean_before_deploy:
+        description: 部署前清理目标目录
+        required: false
+        type: boolean
+        default: true
+      run_install_after_deploy:
+        description: 部署后是否运行依赖安装
+        required: false
+        type: boolean
+        default: false
+
+permissions: write-all
+
+env:
+  WORKFLOW_SCRIPTS_DIR: ${{ github.workspace }}/.xdeploy/production/scripts/workflows
+  WORKFLOW_UTILS_DIR: ${{ github.workspace }}/.xdeploy/production/scripts/workflows/utils
+  DEPLOY_SCRIPTS_DIR: ${{ github.workspace }}/.xdeploy/production/scripts/server
+  DEPLOY_CONFIGS_DIR: ${{ github.workspace }}/.xdeploy/production/configs
+  APP_DEPLOY_DIR_SERVER: /xdeploy/apps/prompthunt/production
+
+jobs:
+  semantic-release:
+    environment: production
+    runs-on: ubuntu-latest
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run semantic-release
+        id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx semantic-release
+          echo "new_release_published=true" >> "$GITHUB_OUTPUT"
+          echo "new_release_version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+  build-and-deploy:
+    environment: production
+    runs-on: ubuntu-latest
+    needs: [semantic-release]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set deployment environment
+        id: set-env
+        run: |
+          ENV="${{ vars.XDP_DEPLOY_ENV || 'production' }}"
+          echo "DEPLOY_ENV=$ENV" >> "$GITHUB_OUTPUT"
+          echo "使用部署环境: $ENV"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ github.event.inputs.node_version || vars.XDP_NODE_VERSION || '24' }}
+
+      - name: Setup PNPM
+        if: ${{ github.event.inputs.package_manager == 'pnpm' || (github.event.inputs.package_manager == '' && !contains(fromJSON('["npm", "yarn", "bun"]'), github.event.inputs.package_manager)) }}
+        uses: pnpm/action-setup@v4
+
+      - name: Setup BUN
+        if: ${{ github.event.inputs.package_manager == 'bun' }}
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ github.event.inputs.bun_version || 'latest' }}
+
+      - name: Install dependencies
+        run: |
+          PACKAGE_MANAGER="${{ github.event.inputs.package_manager || 'pnpm' }}"
+          case "$PACKAGE_MANAGER" in
+            npm)
+              npm ci
+              ;;
+            yarn)
+              yarn install --frozen-lockfile
+              ;;
+            pnpm)
+              pnpm install --frozen-lockfile
+              ;;
+            bun)
+              bun install
+              ;;
+            *)
+              echo "使用默认包管理器 pnpm"
+              pnpm install --frozen-lockfile
+              ;;
+          esac
+
+      - name: Set build parameters
+        id: build-params
+        run: |
+          # 设置构建输出目录
+          if [ -n "${{ vars.XDP_APP_BUILD_DIR }}" ]; then
+            BUILD_DIR="${{ vars.XDP_APP_BUILD_DIR }}"
+          else
+            BUILD_DIR="dist"
+          fi
+          echo "BUILD_DIR=$BUILD_DIR" >> "$GITHUB_OUTPUT"
+          echo "构建输出目录: $BUILD_DIR"
+
+          # 设置包管理器
+          PACKAGE_MANAGER="${{ github.event.inputs.package_manager || 'pnpm' }}"
+          echo "PACKAGE_MANAGER=$PACKAGE_MANAGER" >> "$GITHUB_OUTPUT"
+
+          # 设置 PM2 主配置目录
+          PM2_CONFIG_DIR="${{ vars.XDP_PM2_CONFIG_DIR || '/xdeploy/pm2' }}"
+          echo "PM2_CONFIG_DIR=$PM2_CONFIG_DIR" >> "$GITHUB_OUTPUT"
+          echo "PM2 主配置目录: $PM2_CONFIG_DIR"
+
+          # 设置 PM2 主配置文件
+          PM2_CONFIG_FILE="$PM2_CONFIG_DIR/ecosystem.config.js"
+          echo "PM2_CONFIG_FILE=$PM2_CONFIG_FILE" >> "$GITHUB_OUTPUT"
+          echo "PM2 主配置文件: $PM2_CONFIG_FILE"
+
+      - name: Set deployment servers
+        id: set-servers
+        run: |
+          if [ -n "${{ vars.XDP_SERVERS }}" ]; then
+            echo "使用仓库变量中的 XDP_SERVERS"
+            echo "SERVERS=${{ vars.XDP_SERVERS }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "错误：未提供服务器列表。请在仓库变量中设置 XDP_SERVERS。"
+            exit 1
+          fi
+
+      - name: Setup build environment variables
+        id: build-env
+        run: |
+          ENV_BUILD_TEMPLATE="${{ env.DEPLOY_CONFIGS_DIR }}/env.build"
+          if [ -f "$ENV_BUILD_TEMPLATE" ]; then
+            echo "使用构建环境变量模板..."
+            cp "$ENV_BUILD_TEMPLATE" .env.${{ steps.set-env.outputs.DEPLOY_ENV }}
+
+            echo "配置了构建环境变量:"
+            cat .env.${{ steps.set-env.outputs.DEPLOY_ENV }} | grep -v "^#" | grep -v "^$"
+          else
+            echo "未找到构建环境变量模板，跳过..."
+          fi
+
+      - name: Build app
+        run: |
+          # 加载构建环境变量
+          ENV_FILE=".env.${{ steps.set-env.outputs.DEPLOY_ENV }}"
+          if [ -f "$ENV_FILE" ]; then
+            echo "加载构建环境变量文件: $ENV_FILE"
+            set -a  # 自动导出变量
+            source "$ENV_FILE"
+            set +a  # 停止自动导出
+          else
+            echo "未找到构建环境变量文件: $ENV_FILE"
+            echo "使用默认 NODE_OPTIONS"
+            export NODE_OPTIONS="--max-old-space-size=4096"
+          fi
+
+          ${{ github.event.inputs.build_command || 'pnpm run build' }}
+
+      - name: Prepare deployment scripts
+        run: |
+          # 确保所有脚本有执行权限
+          chmod +x ${WORKFLOW_SCRIPTS_DIR}/*.sh
+          chmod +x ${WORKFLOW_UTILS_DIR}/*.sh
+          chmod +x ${DEPLOY_SCRIPTS_DIR}/*.sh
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.XDS_SSH_PRIVATE_KEY }}
+          known_hosts: placeholder # 将在下一步中填充
+          if_key_exists: replace
+
+      - name: Deploy to servers
+        id: deploy
+        run: |
+          # 分割服务器列表
+          IFS=',' read -ra SERVER_ARRAY <<< "${{ steps.set-servers.outputs.SERVERS }}"
+
+          # 部署到每个服务器
+          for server in "${SERVER_ARRAY[@]}"; do
+            echo "===== 开始部署到服务器: $server ====="
+
+            # 添加服务器到已知主机
+            ssh-keyscan -H $(echo $server | cut -d@ -f2) >> ~/.ssh/known_hosts
+
+            # 使用 Bash 脚本部署应用
+            bash ${WORKFLOW_SCRIPTS_DIR}/app-direct-deploy.sh \
+              "$server" \
+              "${{ vars.XDP_APP_NAME }}" \
+              "$APP_DEPLOY_DIR_SERVER" \
+              "${{ steps.set-env.outputs.DEPLOY_ENV }}" \
+              "${{ vars.XDP_APP_PORT }}" \
+              "${{ steps.build-params.outputs.BUILD_DIR }}" \
+              "${{ github.event.inputs.clean_before_deploy }}" \
+              "${{ github.event.inputs.run_install_after_deploy }}" \
+              "${{ steps.build-params.outputs.PACKAGE_MANAGER }}" \
+              "${{ steps.build-params.outputs.PM2_CONFIG_FILE }}"
+
+            echo "===== 服务器 $server 部署完成 ====="
+          done
+
+      - name: Deployment Summary
+        run: |
+          echo "## 应用直接部署摘要" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 部署流程完成！" >> $GITHUB_STEP_SUMMARY
+          echo "📋 部署详情：" >> $GITHUB_STEP_SUMMARY
+          echo "- 部署环境：${{ steps.set-env.outputs.DEPLOY_ENV }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 部署服务器：${{ steps.set-servers.outputs.SERVERS }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 应用名称：${{ vars.XDP_APP_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 应用部署目录：$APP_DEPLOY_DIR_SERVER" >> $GITHUB_STEP_SUMMARY
+          echo "- 应用端口：${{ vars.XDP_APP_PORT }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 构建输出目录：${{ steps.build-params.outputs.BUILD_DIR }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Node.js 版本：${{ github.event.inputs.node_version || vars.XDP_NODE_VERSION || '18' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 包管理器：${{ steps.build-params.outputs.PACKAGE_MANAGER }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 构建命令：${{ github.event.inputs.build_command || 'pnpm run build' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- PM2 配置目录：${{ steps.build-params.outputs.PM2_CONFIG_DIR }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 部署前清理目标目录：${{ github.event.inputs.clean_before_deploy }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 部署后运行依赖安装：${{ github.event.inputs.run_install_after_deploy }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 部署时间：$(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- 应用访问地址：http://${{ vars.XDP_APP_DOMAIN || vars.XDP_APP_NAME }}:${{ vars.XDP_APP_PORT }}" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,29 @@
+<template>
+  <div class="flex items-center justify-center p-6">
+    <svg width="64px" height="65px" viewBox="0 0 641 656" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <title>logo</title>
+      <defs>
+        <linearGradient id="linearGradient-1" x1="7.49890915%" y1="50%" x2="92.4288488%" y2="50%">
+          <stop stop-color="#76C4FB" offset="0%" />
+          <stop stop-color="#6B23D0" offset="100%" />
+        </linearGradient>
+        <linearGradient id="linearGradient-2" x1="7.49890915%" y1="50%" x2="92.4288488%" y2="50%">
+          <stop stop-color="#6B23D0" offset="0%" />
+          <stop stop-color="#76C4FB" offset="100%" />
+        </linearGradient>
+      </defs>
+      <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="MacBook-Pro-16&quot;" transform="translate(-556, -253)">
+          <g id="logo" transform="translate(556.09, 253.06)">
+            <rect id="Rectangle" x="0" y="0" width="640" height="640" />
+            <g id="Group-2" transform="translate(12.0039, 45)">
+              <path id="left" d="M342.083085,309.814048 L413.749085,433.942242 L-66.2509154,433.942242 L5.41408459,309.814048 L342.083085,309.814048 Z M330.653469,329.790048 L17.0414691,329.790048 L-31.5525309,413.957768 L379.247469,413.957768 L330.653469,329.790048 Z" fill="url(#linearGradient-1)" transform="translate(173.7491, 371.8781) rotate(120) translate(-173.7491, -371.8781)" />
+              <path id="right" d="M518.083085,176.814048 L589.749085,300.942242 L109.749085,300.942242 L181.414085,176.814048 L518.083085,176.814048 Z M506.653469,196.790048 L193.041469,196.790048 L144.447469,280.957768 L555.247469,280.957768 L506.653469,196.790048 Z" fill="url(#linearGradient-1)" transform="translate(349.7491, 238.8781) rotate(-120) translate(-349.7491, -238.8781)" />
+              <path id="bottom" d="M545.083085,395.814048 L616.749085,519.942242 L136.749085,519.942242 L208.414085,395.814048 L545.083085,395.814048 Z M533.653469,415.790048 L220.041469,415.790048 L171.447469,499.957768 L582.247469,499.957768 L533.653469,415.790048 Z" fill="url(#linearGradient-2)" />
+            </g>
+          </g>
+        </g>
+      </g>
+    </svg>
+  </div>
+</template>

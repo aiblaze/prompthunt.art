@@ -1,0 +1,265 @@
+# ============================================================================
+# XDeploy Docker 镜像构建与推送工作流
+# ============================================================================
+#
+# 功能说明：
+#   - 自动构建应用 Docker 镜像
+#   - 推送镜像到指定的容器镜像仓库
+#   - 支持语义化版本发布（基于 semantic-release 插件，该插件使用 GitHub Actions 自动创建的 `GITHUB_TOKEN`，需配置权限 `permissions: write-all`）
+#   - 多标签镜像管理（latest、版本号）
+#
+# 使用场景：
+#   - 应用代码推送到 release 分支时自动构建
+#   - 手动触发镜像构建
+#   - CI/CD 流水线中的镜像构建步骤
+#
+# 触发方式：
+#   - 自动触发：推送到 release 分支
+#   - 手动触发：支持强制构建选项
+#
+# 前置条件：
+#   - 部署环境已就绪（XDP_DEPLOY_READY=true）
+#   - 容器镜像仓库凭据已配置
+#   - 项目包含 Dockerfile 或使用 XDP_DOCKERFILE_TPL 变量指定模板
+#
+# 支持的框架：
+#   - Next.js（使用 Dockerfile.next 模板）
+#   - Nuxt.js（使用 Dockerfile.nuxt 模板）
+#   - 自定义 Dockerfile
+#
+# 镜像标签策略：
+#   - latest：最新版本标签
+#   - 版本号：基于 package.json 的版本
+#
+# 构建优化：
+#   - Docker Buildx 多平台构建
+#   - 镜像缓存优化
+#   - 构建上下文优化
+#   - 内存限制配置
+#
+# ============================================================================
+
+name: 05-XDeployDockerImage-production
+
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 强制构建（忽略 XDP_DEPLOY_READY 检查）
+        required: false
+        type: boolean
+        default: false
+
+permissions: write-all
+
+env:
+  DEPLOY_CONFIGS_DIR: ${{ github.workspace }}/.xdeploy/production/configs
+  DOCKERFILE_TPL: ${{ github.workspace }}/.xdeploy/production/configs/${{ vars.XDP_DOCKERFILE_TPL }}
+
+jobs:
+  check-deploy-ready:
+    environment: production
+    runs-on: ubuntu-latest
+    outputs:
+      is_ready: ${{ steps.check.outputs.is_ready }}
+    steps:
+      - name: 检查部署就绪状态
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.force_build }}" == "true" ]]; then
+            echo "is_ready=true" >> "$GITHUB_OUTPUT"
+            echo "✅ 强制构建模式已启用，跳过就绪检查"
+          elif [[ "${{ vars.XDP_DEPLOY_READY }}" == "true" ]]; then
+            echo "is_ready=true" >> "$GITHUB_OUTPUT"
+            echo "✅ 部署环境已就绪"
+          else
+            echo "is_ready=false" >> "$GITHUB_OUTPUT"
+            echo "❌ 部署环境未就绪，请先执行 01-xdeploy-ssh-key.yml 和 02-xdeploy-init-server.yml 工作流"
+            echo "   然后将 XDP_DEPLOY_READY 变量设置为 true"
+            exit 1
+          fi
+  semantic-release:
+    environment: production
+    runs-on: ubuntu-latest
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run semantic-release
+        id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 执行 semantic-release
+          if npx semantic-release; then
+            echo "new_release_published=true" >> "$GITHUB_OUTPUT"
+            # 获取更新后的版本
+            NEW_VERSION=$(node -p "require('./package.json').version" 2>/dev/null || echo "")
+            if [ -n "$NEW_VERSION" ] && [ "$NEW_VERSION" != "undefined" ]; then
+              echo "new_release_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+              echo "✅ Semantic-release 执行成功，新版本: $NEW_VERSION"
+            else
+              echo "new_release_version=" >> "$GITHUB_OUTPUT"
+              echo "⚠️ Semantic-release 执行成功，但版本获取失败"
+            fi
+          else
+            echo "new_release_published=false" >> "$GITHUB_OUTPUT"
+            # 获取当前版本（未更新）
+            CURRENT_VERSION=$(node -p "require('./package.json').version" 2>/dev/null || echo "")
+            if [ -n "$CURRENT_VERSION" ] && [ "$CURRENT_VERSION" != "undefined" ]; then
+              echo "new_release_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+              echo "⚠️ Semantic-release 执行失败，使用当前版本: $CURRENT_VERSION"
+            else
+              echo "new_release_version=" >> "$GITHUB_OUTPUT"
+              echo "❌ Semantic-release 执行失败，版本获取也失败"
+            fi
+          fi
+
+  build-and-push:
+    environment: production
+    runs-on: ubuntu-latest
+    needs: [semantic-release, check-deploy-ready]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Set deployment environment
+        id: set-env
+        run: |
+          ENV="${{ vars.XDP_DEPLOY_ENV || 'production' }}"
+          echo "DEPLOY_ENV=$ENV" >> "$GITHUB_OUTPUT"
+          echo "使用部署环境: $ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get version from package.json
+        id: package-version
+        run: |
+          # 尝试从 package.json 获取版本
+          if VERSION=$(node -p "require('./package.json').version" 2>/dev/null) && [ -n "$VERSION" ] && [ "$VERSION" != "undefined" ]; then
+            echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "✅ 从 package.json 获取版本成功: $VERSION"
+          else
+            # 如果 package.json 获取失败，尝试使用 semantic-release 输出的版本
+            SEMANTIC_VERSION="${{ needs.semantic-release.outputs.new_release_version }}"
+            if [ -n "$SEMANTIC_VERSION" ] && [ "$SEMANTIC_VERSION" != "undefined" ]; then
+              VERSION="$SEMANTIC_VERSION"
+              echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+              echo "⚠️ package.json 获取失败，使用 semantic-release 版本: $VERSION"
+            else
+              # 如果都失败，使用默认版本
+              VERSION="0.0.1"
+              echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+              echo "❌ 版本获取失败，使用默认版本: $VERSION"
+            fi
+          fi
+
+      - name: Get short SHA
+        id: short-sha
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set Docker build parameters
+        id: build-params
+        run: |
+          # 设置容器内部端口
+          if [ -n "${{ vars.XDP_APP_PORT_CONTAINER }}" ]; then
+            PORT="${{ vars.XDP_APP_PORT_CONTAINER }}"
+          else
+            # 如果未设置，则使用 XDP_APP_PORT 变量
+            PORT="${{ vars.XDP_APP_PORT || '3000' }}"
+          fi
+          echo "PORT=$PORT" >> "$GITHUB_OUTPUT"
+          echo "容器内部端口: $PORT"
+
+      - name: Login to Aliyun Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.XDP_REGISTRY_URL }}
+          username: ${{ vars.XDP_REGISTRY_USERNAME }}
+          password: ${{ secrets.XDS_REGISTRY_PASSWORD }}
+
+      - name: Prepare Dockerfile
+        id: prepare-dockerfile
+        run: |
+          if [ -f "./Dockerfile" ]; then
+            echo "使用项目根目录的 Dockerfile"
+            echo "DOCKERFILE_PATH=./Dockerfile" >> "$GITHUB_OUTPUT"
+          else
+            # 尝试使用环境特定的 Dockerfile 模板
+            if [ -f "${{ env.DOCKERFILE_TPL }}" ]; then
+              echo "使用 Dockerfile 模板: ${{ env.DOCKERFILE_TPL }}"
+              mkdir -p ./deploy
+              cp "${{ env.DOCKERFILE_TPL }}" ./Dockerfile
+              echo "DOCKERFILE_PATH=./Dockerfile" >> "$GITHUB_OUTPUT"
+            else
+              echo "错误：未找到可用的 Dockerfile。请在项目根目录创建一个 Dockerfile 或通过 XDP_DOCKERFILE_TPL 变量指定模板。"
+              exit 1
+            fi
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        with:
+          context: .
+          push: true
+          file: ${{ steps.prepare-dockerfile.outputs.DOCKERFILE_PATH }}
+          build-args: |
+            PORT=${{ steps.build-params.outputs.PORT }}
+          tags: |
+            ${{ vars.XDP_REGISTRY_URL }}/${{ vars.XDP_REGISTRY_NAMESPACE }}/${{ vars.XDP_APP_NAME || 'app' }}:latest
+            ${{ vars.XDP_REGISTRY_URL }}/${{ vars.XDP_REGISTRY_NAMESPACE }}/${{ vars.XDP_APP_NAME || 'app' }}:${{ steps.package-version.outputs.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Summary
+        run: |
+          echo "✅ Docker 镜像构建并推送成功！"
+          echo "📋 镜像详情："
+          echo "   - 部署环境：${{ steps.set-env.outputs.DEPLOY_ENV }}"
+          echo "   - 仓库：${{ vars.XDP_REGISTRY_URL }}/${{ vars.XDP_REGISTRY_NAMESPACE }}/${{ vars.XDP_APP_NAME || 'app' }}"
+
+          # 确保版本信息不为空
+          VERSION="${{ steps.package-version.outputs.VERSION }}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "undefined" ]; then
+            VERSION="0.0.1"
+            echo "⚠️ 版本信息异常，使用默认版本: $VERSION"
+          fi
+
+          echo "   - 标签：latest, $VERSION"
+          echo "   - 版本：$VERSION"
+          echo "   - 提交：${{ steps.short-sha.outputs.SHA }}"
+          echo "   - 容器内部端口：${{ steps.build-params.outputs.PORT }}"
+
+          # 显示新版本发布信息
+          if [ "${{ needs.semantic-release.outputs.new_release_published }}" == "true" ] && [ -n "${{ needs.semantic-release.outputs.new_release_version }}" ]; then
+            echo "   - 新版本发布：${{ needs.semantic-release.outputs.new_release_version }}"
+          else
+            echo "   - 新版本发布：无（使用现有版本）"
+          fi

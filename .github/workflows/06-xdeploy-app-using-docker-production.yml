@@ -1,0 +1,202 @@
+# ============================================================================
+# XDeploy 应用容器化部署工作流
+# ============================================================================
+#
+# 功能说明：
+#   - 使用 Docker 容器部署应用到服务器
+#   - 基于 Docker Compose 进行容器编排
+#   - 自动拉取最新镜像并重启服务
+#   - 部署后健康检查验证
+#
+# 使用场景：
+#   - Docker 镜像构建完成后自动部署
+#   - 手动指定镜像标签进行部署
+#   - 生产环境容器化应用部署
+#
+# 触发方式：
+#   - 自动触发：05-XDeploy-Docker-Image 工作流成功完成后
+#   - 手动触发：可指定特定的镜像标签
+#
+# 前置条件：
+#   - Docker 镜像已构建并推送到仓库
+#   - 服务器已安装 Docker 和 Docker Compose
+#   - SSH 密钥已配置
+#   - 容器镜像仓库凭据已配置
+#
+# 部署流程：
+#   1. 生成 Docker Compose 配置文件
+#   2. 登录容器镜像仓库
+#   3. 拉取最新镜像
+#   4. 停止旧容器
+#   5. 启动新容器
+#   6. 健康检查验证
+#
+# 容器管理功能：
+#   - 零停机部署
+#   - 容器健康检查
+#   - 日志管理
+#   - 资源限制配置
+#   - 网络配置
+#
+# 监控与维护：
+#   - 部署状态监控
+#   - 容器运行状态检查
+#   - 部署摘要报告
+#
+# ============================================================================
+
+name: 06-XDeployAppUsingDocker-production
+
+on:
+  workflow_run:
+    workflows: [05-XDeployDockerImage-production]
+    types:
+      - completed
+    branches:
+      - release
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '镜像标签 (默认: latest)'
+        required: false
+        default: latest
+        type: string
+
+env:
+  WORKFLOW_SCRIPTS_DIR: ${{ github.workspace }}/.xdeploy/production/scripts/workflows
+  WORKFLOW_UTILS_DIR: ${{ github.workspace }}/.xdeploy/production/scripts/workflows/utils
+  DEPLOY_SCRIPTS_DIR: ${{ github.workspace }}/.xdeploy/production/scripts/server
+  DEPLOY_CONFIGS_DIR: ${{ github.workspace }}/.xdeploy/production/configs
+  APP_DEPLOY_DIR_SERVER: /xdeploy/apps/prompthunt/production
+
+jobs:
+  deploy:
+    environment: production
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set deployment environment
+        id: set-env
+        run: |
+          ENV="${{ vars.XDP_DEPLOY_ENV || 'production' }}"
+          echo "DEPLOY_ENV=$ENV" >> "$GITHUB_OUTPUT"
+          echo "使用部署环境: $ENV"
+
+      - name: Set deployment tag
+        id: set-tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "TAG=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ vars.XDP_APP_IMAGE_TAG }}" ]; then
+            echo "TAG=${{ vars.XDP_APP_IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "TAG=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set deployment servers
+        id: set-servers
+        run: |
+          if [ -n "${{ vars.XDP_SERVERS }}" ]; then
+            echo "使用仓库变量中的 XDP_SERVERS"
+            echo "SERVERS=${{ vars.XDP_SERVERS }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "错误：未提供服务器列表。请在工作流输入中指定服务器或在仓库变量中设置 XDP_SERVERS。"
+            exit 1
+          fi
+
+      - name: Setup script environment
+        run: |
+          # 确保所有脚本有执行权限
+          chmod +x ${WORKFLOW_SCRIPTS_DIR}/*.sh
+          chmod +x ${WORKFLOW_UTILS_DIR}/*.sh
+          chmod +x ${DEPLOY_SCRIPTS_DIR}/*.sh
+
+      - name: Generate docker-compose.yml
+        run: |
+          mkdir -p ./deploy
+          # 使用环境特定的 docker-compose 模板
+          cp "${{ env.DEPLOY_CONFIGS_DIR }}/docker-compose.yml" ./deploy/docker-compose.yml
+
+          echo "生成的 docker-compose.yml 文件："
+          cat ./deploy/docker-compose.yml
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.XDS_SSH_PRIVATE_KEY }}
+          known_hosts: placeholder # 将在下一步中填充
+          if_key_exists: replace
+
+      - name: Deploy to servers
+        id: deploy
+        run: |
+          # 分割服务器列表
+          IFS=',' read -ra SERVER_ARRAY <<< "${{ steps.set-servers.outputs.SERVERS }}"
+
+          # 部署到每个服务器
+          for server in "${SERVER_ARRAY[@]}"; do
+            echo "===== 开始部署到服务器: $server ====="
+
+            # 添加服务器到已知主机
+            ssh-keyscan -H $(echo $server | cut -d@ -f2) >> ~/.ssh/known_hosts
+
+            # 使用部署脚本
+            ./.xdeploy/${{ steps.set-env.outputs.DEPLOY_ENV }}/scripts/workflows/app-deploy.sh \
+              "$server" \
+              "${{ vars.XDP_APP_NAME }}" \
+              "$APP_DEPLOY_DIR_SERVER" \
+              "${{ vars.XDP_APP_PORT }}" \
+              "${{ vars.XDP_APP_PORT_CONTAINER || vars.XDP_APP_PORT }}" \
+              "${{ vars.XDP_APP_IMAGE_NAME || vars.XDP_APP_NAME }}" \
+              "${{ steps.set-tag.outputs.TAG }}" \
+              "${{ vars.XDP_REGISTRY_URL }}" \
+              "${{ vars.XDP_REGISTRY_NAMESPACE }}" \
+              "${{ vars.XDP_REGISTRY_USERNAME }}" \
+              "${{ secrets.XDS_REGISTRY_PASSWORD }}" \
+              "./deploy/docker-compose.yml"
+
+            echo "===== 服务器 $server 部署完成 ====="
+          done
+
+      - name: Health check
+        run: |
+          # 分割服务器列表
+          IFS=',' read -ra SERVER_ARRAY <<< "${{ steps.set-servers.outputs.SERVERS }}"
+
+          # 检查每个服务器上的应用
+          for server in "${SERVER_ARRAY[@]}"; do
+            echo "检查服务器 $server 上的应用健康状态..."
+            ${WORKFLOW_SCRIPTS_DIR}/app-deploy.sh \
+              "$server" \
+              "${{ vars.XDP_APP_NAME }}" \
+              "$APP_DEPLOY_DIR_SERVER" \
+              "${{ vars.XDP_APP_PORT }}" \
+              "${{ vars.XDP_APP_PORT_CONTAINER || vars.XDP_APP_PORT }}" \
+              "${{ vars.XDP_APP_IMAGE_NAME || vars.XDP_APP_NAME }}" \
+              "${{ steps.set-tag.outputs.TAG }}" \
+              "${{ vars.XDP_REGISTRY_URL }}" \
+              "${{ vars.XDP_REGISTRY_NAMESPACE }}" \
+              "${{ vars.XDP_REGISTRY_USERNAME }}" \
+              "${{ secrets.XDS_REGISTRY_PASSWORD }}" \
+              "./deploy/docker-compose.yml" \
+              "true"
+          done
+
+      - name: Deployment Summary
+        run: |
+          echo "✅ 部署流程完成！"
+          echo "📋 部署详情："
+          echo "   - 部署环境：${{ steps.set-env.outputs.DEPLOY_ENV }}"
+          echo "   - 部署服务器：${{ steps.set-servers.outputs.SERVERS }}"
+          echo "   - 应用名称：${{ vars.XDP_APP_NAME }}"
+          echo "   - 应用 Docker Compose 文件目录：$APP_DEPLOY_DIR_SERVER"
+          echo "   - 应用外部端口：${{ vars.XDP_APP_PORT }}"
+          echo "   - 应用容器内部端口：${{ vars.XDP_APP_PORT_CONTAINER }}"
+          echo "   - 镜像名称：${{ vars.XDP_APP_IMAGE_NAME || vars.XDP_APP_NAME }}"
+          echo "   - 镜像标签：${{ steps.set-tag.outputs.TAG }}"
+          echo "   - 部署时间：$(date)"
+          echo "   - 应用访问地址：https://${{ vars.XDP_APP_DOMAIN || vars.XDP_APP_NAME }}"

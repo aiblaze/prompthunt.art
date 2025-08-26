@@ -1,0 +1,137 @@
+{
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+  "editor.quickSuggestions": {
+    "strings": true
+  },
+  "tailwindCSS.experimental.configFile": "tailwind.config.ts",
+  "tailwindCSS.experimental.classRegex": [
+    [
+      "ui:\\s*{([^)]*)\\s*}",
+      "[\"'`]([^\"'`]*).*?[\"'`]"
+    ],
+    [
+      "/\\*ui\\*/\\s*{([^;]*)}",
+      ":\\s*[\"'`]([^\"'`]*).*?[\"'`]"
+    ]
+  ],
+  "tailwindCSS.classAttributes": [
+    "class",
+    "className",
+    "ngClass",
+    "ui"
+  ],
+  "editor.tabSize": 2,
+  "editor.renderWhitespace": "all",
+  "i18n-ally.localesPaths": [
+    "i18n/locales"
+  ],
+  "i18n-ally.displayLanguage": "zh-CN",
+  "i18n-ally.sourceLanguage": "zh-CN",
+  "cSpell.words": [
+    "aiblaze",
+    "aifire",
+    "aispin",
+    "aliyun",
+    "almalinux",
+    "arcticons",
+    "Avenir",
+    "buildcache",
+    "Buildx",
+    "Cascadia",
+    "certbot",
+    "CICD",
+    "Consolas",
+    "deepseek",
+    "doubao",
+    "easingthemes",
+    "EOSSH",
+    "fireai",
+    "fontaine",
+    "healthcheck",
+    "huangyongyou",
+    "iconify",
+    "letsencrypt",
+    "Meituan",
+    "Menlo",
+    "mkcert",
+    "netease",
+    "Neue",
+    "Noto",
+    "nuxt",
+    "nuxthq",
+    "nuxtjs",
+    "oklch",
+    "prompthunt",
+    "PWDS",
+    "rednote",
+    "rgba",
+    "Roboto",
+    "Segoe",
+    "Shenzhen",
+    "sshpass",
+    "tailwindcss",
+    "taze",
+    "trae",
+    "vueuse",
+    "wechat",
+    "xcertbot",
+    "xdeploy",
+    "xplayer",
+    "xsin",
+    "zoop",
+    "zoopdark"
+  ],
+  "i18n-ally.keystyle": "nested",
+  "i18n-ally.autoDetection": true,
+  // Disable the default formatter, use eslint instead
+  "prettier.enable": false,
+  "editor.formatOnSave": false,
+
+  // Auto fix
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "never"
+  },
+
+  // Silent the stylistic rules in you IDE, but still auto fix them
+  "eslint.rules.customizations": [
+    { "rule": "style/*", "severity": "off", "fixable": true },
+    { "rule": "format/*", "severity": "off", "fixable": true },
+    { "rule": "*-indent", "severity": "off", "fixable": true },
+    { "rule": "*-spacing", "severity": "off", "fixable": true },
+    { "rule": "*-spaces", "severity": "off", "fixable": true },
+    { "rule": "*-order", "severity": "off", "fixable": true },
+    { "rule": "*-dangle", "severity": "off", "fixable": true },
+    { "rule": "*-newline", "severity": "off", "fixable": true },
+    { "rule": "*quotes", "severity": "off", "fixable": true },
+    { "rule": "*semi", "severity": "off", "fixable": true }
+  ],
+
+  // Enable eslint for all supported languages
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact",
+    "vue",
+    "html",
+    "markdown",
+    "json",
+    "json5",
+    "jsonc",
+    "yaml",
+    "toml",
+    "xml",
+    "gql",
+    "graphql",
+    "astro",
+    "svelte",
+    "css",
+    "less",
+    "scss",
+    "pcss",
+    "postcss"
+  ]
+}

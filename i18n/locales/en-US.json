@@ -1,0 +1,31 @@
+{
+  "author": {
+    "name": "PROMPTHUNT 🔥",
+    "title": "Master the art of AI language and use AI efficiently.",
+    "desc": "Focus on the world of AI prompts to help everyone use AI better. Follow PROMPTHUNT.ART, the world of AI prompts is at your fingertips!"
+  },
+  "labels": {
+    "stayInTouch": "Stay in touch",
+    "wechat": "Wechat",
+    "email": "Email",
+    "allArticles": "All Articles",
+    "latestArticles": "Latest Articles",
+    "home": "Home",
+    "articles": "Articles",
+    "bookmarks": "Bookmarks",
+    "music": "Music",
+    "allRightsReserved": "All rights reserved"
+  },
+  "pageArticles": {
+    "title": "AI Articles",
+    "desc": "Articles about AI."
+  },
+  "pageMusic": {
+    "title": "AI Music",
+    "desc": "Best music made by AI."
+  },
+  "pageBookmarks": {
+    "title": "AI Bookmarks",
+    "desc": "Bookmarks related to AI."
+  }
+}
