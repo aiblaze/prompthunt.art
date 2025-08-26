@@ -4,6 +4,7 @@ FROM node:24-alpine AS builder
 
 # 1.1 安装 pnpm 和构建依赖
 RUN corepack enable && corepack prepare pnpm@latest --activate
+# nuxt-content 依赖 better-sqlite3，需要安装构建依赖
 RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
