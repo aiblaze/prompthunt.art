@@ -1,8 +1,11 @@
 # Builder stage 1 - Build the application
 FROM node:24-alpine AS builder
 
-# Install pnpm
+# Install pnpm and build dependencies
 RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
+
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
@@ -10,7 +13,7 @@ WORKDIR /app
 COPY .npmrc package.json pnpm-lock.yaml ./
 
 # Install dependencies with rebuild for native modules
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --rebuild
 
 # Copy the entire project
 COPY . ./
