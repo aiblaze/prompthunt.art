@@ -53,7 +53,7 @@ on:
     types:
       - completed
     branches:
-      - release
+      - main
   workflow_dispatch:
     inputs:
       tag:
