@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/aiblaze/prompthunt.art/compare/v1.1.0...v1.2.0) (2025-09-16)
+
+
+### Features
+
+* add 3 new articles ([3965894](https://github.com/aiblaze/prompthunt.art/commit/3965894c9756e08b55757ea761431bcc235f3363))
+
 # [1.1.0](https://github.com/aiblaze/prompthunt.art/compare/v1.0.0...v1.1.0) (2025-08-26)
 
 
