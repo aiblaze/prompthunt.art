@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/aiblaze/prompthunt.art/compare/v1.2.0...v1.3.0) (2025-10-30)
+
+
+### Features
+
+* 增加卖点词生成助手 ([ec98849](https://github.com/aiblaze/prompthunt.art/commit/ec9884943f4b14acaa0b17ccfe320df301f3df87))
+
 # [1.2.0](https://github.com/aiblaze/prompthunt.art/compare/v1.1.0...v1.2.0) (2025-09-16)
 
 
