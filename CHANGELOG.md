@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/aiblaze/prompthunt.art/compare/v1.3.0...v1.4.0) (2026-01-17)
+
+
+### Features
+
+* 增加肝郁脾虚自救助手 ([db2b76c](https://github.com/aiblaze/prompthunt.art/commit/db2b76c75ad9cf38db9dee55ca6c508af3f3f434))
+
 # [1.3.0](https://github.com/aiblaze/prompthunt.art/compare/v1.2.0...v1.3.0) (2025-10-30)
 
 
