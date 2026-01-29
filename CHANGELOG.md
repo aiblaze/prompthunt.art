@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/aiblaze/prompthunt.art/compare/v1.4.0...v1.5.0) (2026-01-29)
+
+
+### Features
+
+* Create 260129-ai-agent-spice-manual-helper.md ([f2a6ebe](https://github.com/aiblaze/prompthunt.art/commit/f2a6ebeda9161661150718e97304a37bb79a88cc))
+
 # [1.4.0](https://github.com/aiblaze/prompthunt.art/compare/v1.3.0...v1.4.0) (2026-01-17)
 
 
