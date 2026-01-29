@@ -1,3 +1,10 @@
+## [1.5.3](https://github.com/aiblaze/prompthunt.art/compare/v1.5.2...v1.5.3) (2026-01-29)
+
+
+### Bug Fixes
+
+* 优化香料手册助手的输出排版 ([461f9a9](https://github.com/aiblaze/prompthunt.art/commit/461f9a96e0d3d22774167eb0efa6db71f0753a28))
+
 ## [1.5.2](https://github.com/aiblaze/prompthunt.art/compare/v1.5.1...v1.5.2) (2026-01-29)
 
 
