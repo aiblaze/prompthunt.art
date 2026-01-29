@@ -1,3 +1,10 @@
+## [1.5.4](https://github.com/aiblaze/prompthunt.art/compare/v1.5.3...v1.5.4) (2026-01-29)
+
+
+### Bug Fixes
+
+* 香料手册助手增加爆款标题生成 ([1f63af2](https://github.com/aiblaze/prompthunt.art/commit/1f63af2a63f17ae9459e46c8dec5746d8de05024))
+
 ## [1.5.3](https://github.com/aiblaze/prompthunt.art/compare/v1.5.2...v1.5.3) (2026-01-29)
 
 
