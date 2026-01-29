@@ -1,3 +1,10 @@
+## [1.5.2](https://github.com/aiblaze/prompthunt.art/compare/v1.5.1...v1.5.2) (2026-01-29)
+
+
+### Bug Fixes
+
+* 香料手册助手加入‘温馨提醒’模块 ([9315236](https://github.com/aiblaze/prompthunt.art/commit/9315236c3f2df0ef10e105a6bc1ad24e169124f4))
+
 ## [1.5.1](https://github.com/aiblaze/prompthunt.art/compare/v1.5.0...v1.5.1) (2026-01-29)
 
 
